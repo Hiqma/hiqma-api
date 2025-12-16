@@ -28,7 +28,7 @@ async function bootstrap() {
   });
   
   app.enableCors({
-    origin: ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002'],
+    origin: ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002', 'https://api.hiqma.org', 'https://dashboard.hiqma.org', 'https://edgehub.hiqma.org'],
     credentials: true,
   });
   
