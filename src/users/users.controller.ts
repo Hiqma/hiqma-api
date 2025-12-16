@@ -21,6 +21,21 @@ export class UsersController {
     return this.usersService.getUsers();
   }
 
+  @Get('contributors')
+  @ApiOperation({ summary: 'Get all contributors' })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Contributors retrieved successfully',
+    example: [{
+      id: 'user-123',
+      name: 'John Doe',
+      email: 'john@example.com'
+    }]
+  })
+  async getContributors() {
+    return this.usersService.getContributors();
+  }
+
   @Get('profile/:id')
   @ApiOperation({ summary: 'Get user profile with authored content' })
   @ApiResponse({ status: 200, description: 'Profile retrieved successfully' })

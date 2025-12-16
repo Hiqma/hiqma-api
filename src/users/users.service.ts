@@ -22,6 +22,14 @@ export class UsersService {
     });
   }
 
+  async getContributors() {
+    return this.userRepository.find({
+      where: { role: 'contributor' },
+      select: ['id', 'email', 'name'],
+      order: { name: 'ASC' },
+    });
+  }
+
   async changePassword(id: string, newPassword: string) {
     const user = await this.userRepository.findOne({ where: { id } });
     if (!user) {

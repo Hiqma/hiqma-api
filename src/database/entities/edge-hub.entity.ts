@@ -37,4 +37,20 @@ export class EdgeHub {
 
   @Column({ type: 'timestamp', nullable: true })
   lastSyncAt: Date;
+
+  // Metrics
+  @Column({ type: 'integer', default: 0 })
+  totalReaders: number;
+
+  @Column({ type: 'integer', default: 0 })
+  activeReaders: number;
+
+  @Column({ type: 'integer', default: 0 })
+  totalContent: number;
+
+  @Column({ type: 'bigint', default: 0 })
+  dataTransferred: number; // in bytes
+
+  @Column({ type: 'timestamp', nullable: true })
+  lastMetricsUpdate: Date;
 }

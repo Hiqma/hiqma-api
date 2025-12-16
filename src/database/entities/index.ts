@@ -9,3 +9,6 @@ export { AgeGroup } from './age-group.entity';
 export { EdgeHub } from './edge-hub.entity';
 export { ContentAuthor } from './content-author.entity';
 export { ContentCategory } from './content-category.entity';
+export { HubContent } from './hub-content.entity';
+export { Device } from './device.entity';
+export { Student } from './student.entity';

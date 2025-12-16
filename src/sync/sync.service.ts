@@ -13,10 +13,38 @@ export class SyncService {
   ) {}
 
   async getVerifiedContent() {
-    return this.contentRepository.find({
+    const content = await this.contentRepository.find({
       where: { status: 'verified' },
       order: { createdAt: 'DESC' },
     });
+
+    // Extract images from HTML content and include cover image
+    return content.map(item => {
+      const htmlImages = this.extractImagesFromHtml(item.htmlContent || '');
+      const allImages = [...htmlImages];
+      
+      // Add cover image if it exists
+      if (item.coverImageUrl) {
+        allImages.unshift(item.coverImageUrl); // Add cover image at the beginning
+      }
+      
+      return {
+        ...item,
+        images: allImages
+      };
+    });
+  }
+
+  private extractImagesFromHtml(html: string): string[] {
+    const images: string[] = [];
+    const imgRegex = /<img[^>]+src="([^"]+)"/g;
+    let match;
+    
+    while ((match = imgRegex.exec(html)) !== null) {
+      images.push(match[1]);
+    }
+    
+    return images;
   }
 
   async uploadActivityLogs(logs: Partial<ActivityLog>[]) {
@@ -32,7 +60,7 @@ export class SyncService {
       .addSelect('COUNT(*)', 'activities')
       .addSelect('SUM(log.timeSpent)', 'totalTime')
       .groupBy('log.hubId')
-      .orderBy('totalTime', 'DESC')
+      .orderBy('SUM(log.timeSpent)', 'DESC')
       .limit(10)
       .getRawMany();
 

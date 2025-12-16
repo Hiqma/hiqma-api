@@ -1,6 +1,7 @@
-import { Controller, Post, Body } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBody } from '@nestjs/swagger';
+import { Controller, Post, Body, Get, UseGuards, Request } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiBearerAuth } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
+import { JwtAuthGuard } from './jwt-auth.guard';
 
 class LoginDto {
   email: string;
@@ -88,5 +89,28 @@ export class AuthController {
   })
   async register(@Body() registerDto: RegisterDto) {
     return this.authService.register(registerDto);
+  }
+
+  @Get('me')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get current user information' })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Current user retrieved successfully',
+    example: {
+      id: 'user-123',
+      email: 'user@example.com',
+      role: 'super_admin',
+      name: 'John Doe',
+      createdAt: '2025-01-01T00:00:00.000Z'
+    }
+  })
+  @ApiResponse({ 
+    status: 401, 
+    description: 'Unauthorized - invalid or missing token'
+  })
+  async getCurrentUser(@Request() req: any) {
+    return this.authService.getUserById(req.user.userId);
   }
 }

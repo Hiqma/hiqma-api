@@ -23,7 +23,7 @@ export class ContentSanitizerService {
   }
 
   private validateImageSources(html: string): string {
-    const trustedDomains = ['localhost', 'aelh.org', 'cdn.aelh.org'];
+    const trustedDomains = ['localhost', 'aelh.org', 'cdn.aelh.org', 'amazonaws.com', 's3.amazonaws.com', 's3.eu-west-3.amazonaws.com'];
 
     return html.replace(/<img[^>]+src="([^"]*)"[^>]*>/g, (match, src) => {
       if (src.startsWith('data:image/')) {
@@ -32,7 +32,7 @@ export class ContentSanitizerService {
 
       try {
         const url = new URL(src);
-        if (trustedDomains.some(domain => url.hostname.endsWith(domain))) {
+        if (trustedDomains.some(domain => url.hostname.includes(domain) || url.hostname.endsWith(domain))) {
           return match;
         }
       } catch (e) {

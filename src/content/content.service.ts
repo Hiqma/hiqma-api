@@ -186,13 +186,14 @@ export class ContentService {
     };
   }
 
-  async updateContent(id: string, contentData: any) {
+  async updateContent(id: string, contentData: any, userRole?: string) {
     const existingContent = await this.contentRepository.findOne({ where: { id } });
     if (!existingContent) {
       throw new BadRequestException('Content not found');
     }
 
-    if (existingContent.status !== 'pending') {
+    // Super admins and moderators can edit any content, contributors can only edit pending content
+    if (userRole !== 'super_admin' && userRole !== 'moderator' && existingContent.status !== 'pending') {
       throw new BadRequestException('Only pending content can be edited');
     }
 
@@ -200,9 +201,9 @@ export class ContentService {
     await this.contentAuthorRepository.delete({ contentId: id });
     await this.contentCategoryRepository.delete({ contentId: id });
 
-    // Update content
+    // Update content - use save() to trigger @UpdateDateColumn
     const { authorId: authorIds, categoryId: categoryIds, ...contentToUpdate } = contentData;
-    await this.contentRepository.update(id, contentToUpdate);
+    await this.contentRepository.save({ id, ...contentToUpdate });
 
     // Recreate relationships
     if (authorIds && Array.isArray(authorIds)) {
@@ -221,11 +222,11 @@ export class ContentService {
   }
 
   async updateContentStatus(id: string, status: 'verified' | 'rejected', reason?: string) {
-    const updateData: any = { status };
+    const updateData: any = { id, status };
     if (reason) {
       updateData.rejectionReason = reason;
     }
-    return this.contentRepository.update(id, updateData);
+    return this.contentRepository.save(updateData);
   }
 
   async getAllContent(search?: string, page: number = 1, limit: number = 10) {
@@ -286,6 +287,108 @@ export class ContentService {
 
     return {
       data,
+      total,
+      page,
+      totalPages: Math.ceil(total / limit)
+    };
+  }
+
+  async getAdminContent(filters: {
+    search?: string;
+    status?: string;
+    contributorId?: string;
+    authorId?: string;
+    categoryId?: string;
+    ageGroupId?: string;
+    page: number;
+    limit: number;
+  }) {
+    const { search, status, contributorId, authorId, categoryId, ageGroupId, page, limit } = filters;
+
+    const queryBuilder = this.contentRepository
+      .createQueryBuilder('content')
+      .leftJoinAndSelect('content.contributor', 'contributor')
+      .leftJoinAndSelect('content.ageGroup', 'ageGroup')
+      .leftJoinAndSelect('content.contentAuthors', 'contentAuthors')
+      .leftJoinAndSelect('contentAuthors.author', 'author')
+      .leftJoinAndSelect('content.contentCategories', 'contentCategories')
+      .leftJoinAndSelect('contentCategories.category', 'category');
+
+    // Apply filters - use where() for conditions to ensure proper query building
+    let hasWhere = false;
+
+    if (status) {
+      queryBuilder.where('content.status = :status', { status });
+      hasWhere = true;
+    }
+
+    if (contributorId) {
+      if (hasWhere) {
+        queryBuilder.andWhere('content.contributorId = :contributorId', { contributorId });
+      } else {
+        queryBuilder.where('content.contributorId = :contributorId', { contributorId });
+        hasWhere = true;
+      }
+    }
+
+    if (ageGroupId) {
+      if (hasWhere) {
+        queryBuilder.andWhere('content.ageGroupId = :ageGroupId', { ageGroupId });
+      } else {
+        queryBuilder.where('content.ageGroupId = :ageGroupId', { ageGroupId });
+        hasWhere = true;
+      }
+    }
+
+    if (authorId) {
+      if (hasWhere) {
+        queryBuilder.andWhere('contentAuthors.authorId = :authorId', { authorId });
+      } else {
+        queryBuilder.where('contentAuthors.authorId = :authorId', { authorId });
+        hasWhere = true;
+      }
+    }
+
+    if (categoryId) {
+      if (hasWhere) {
+        queryBuilder.andWhere('contentCategories.categoryId = :categoryId', { categoryId });
+      } else {
+        queryBuilder.where('contentCategories.categoryId = :categoryId', { categoryId });
+        hasWhere = true;
+      }
+    }
+
+    if (search) {
+      if (hasWhere) {
+        queryBuilder.andWhere(
+          '(content.title ILIKE :search OR content.description ILIKE :search)',
+          { search: `%${search}%` }
+        );
+      } else {
+        queryBuilder.where(
+          '(content.title ILIKE :search OR content.description ILIKE :search)',
+          { search: `%${search}%` }
+        );
+        hasWhere = true;
+      }
+    }
+
+    const total = await queryBuilder.getCount();
+    const data = await queryBuilder
+      .orderBy('content.createdAt', 'DESC')
+      .skip((page - 1) * limit)
+      .take(limit)
+      .getMany();
+
+    // Transform data to include author and category arrays
+    const transformedData = data.map(content => ({
+      ...content,
+      authors: content.contentAuthors?.map(ca => ca.author) || [],
+      categories: content.contentCategories?.map(cc => cc.category) || []
+    }));
+
+    return {
+      data: transformedData,
       total,
       page,
       totalPages: Math.ceil(total / limit)

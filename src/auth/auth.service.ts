@@ -44,4 +44,13 @@ export class AuthService {
     const { password, ...result } = savedUser;
     return result;
   }
+
+  async getUserById(userId: string) {
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+    const { password, ...result } = user;
+    return result;
+  }
 }

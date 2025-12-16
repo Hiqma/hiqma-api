@@ -115,6 +115,57 @@ export class ContentController {
     return this.contentService.getPendingContent(search, page, limit);
   }
 
+  @Get('admin/all')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('super_admin', 'moderator')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get all content with advanced filtering (admin only)' })
+  @ApiQuery({ name: 'search', required: false, description: 'Search term for title or description' })
+  @ApiQuery({ name: 'status', required: false, description: 'Filter by status: pending, verified, rejected' })
+  @ApiQuery({ name: 'contributorId', required: false, description: 'Filter by contributor ID' })
+  @ApiQuery({ name: 'authorId', required: false, description: 'Filter by author ID' })
+  @ApiQuery({ name: 'categoryId', required: false, description: 'Filter by category ID' })
+  @ApiQuery({ name: 'ageGroupId', required: false, description: 'Filter by age group ID' })
+  @ApiQuery({ name: 'page', required: false, description: 'Page number (default: 1)' })
+  @ApiQuery({ name: 'limit', required: false, description: 'Items per page (default: 10)' })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Content retrieved successfully with filters',
+    example: {
+      data: [{
+        id: 'content-456',
+        title: 'Story Title',
+        status: 'verified',
+        contributorId: 'user-123',
+        createdAt: '2025-01-01T00:00:00.000Z'
+      }],
+      total: 1,
+      page: 1,
+      totalPages: 1
+    }
+  })
+  async getAdminContent(
+    @Query('search') search?: string,
+    @Query('status') status?: string,
+    @Query('contributorId') contributorId?: string,
+    @Query('authorId') authorId?: string,
+    @Query('categoryId') categoryId?: string,
+    @Query('ageGroupId') ageGroupId?: string,
+    @Query('page') page: number = 1,
+    @Query('limit') limit: number = 10
+  ) {
+    return this.contentService.getAdminContent({
+      search,
+      status,
+      contributorId,
+      authorId,
+      categoryId,
+      ageGroupId,
+      page,
+      limit
+    });
+  }
+
   @Post('submit')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('contributor', 'moderator', 'super_admin')
@@ -175,9 +226,9 @@ export class ContentController {
 
   @Put(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('contributor')
+  @Roles('contributor', 'super_admin', 'moderator')
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Update pending content' })
+  @ApiOperation({ summary: 'Update content' })
   async updateContent(
     @Param('id') id: string,
     @Body() contentData: SubmitContentDto,
@@ -190,7 +241,7 @@ export class ContentController {
       comprehensionQuestions: contentData.comprehensionQuestions ? JSON.stringify(contentData.comprehensionQuestions) : undefined,
       images: contentData.images ? JSON.stringify(contentData.images) : undefined,
     };
-    return this.contentService.updateContent(id, payload);
+    return this.contentService.updateContent(id, payload, req.user?.role);
   }
 
   @Put(':id/status')

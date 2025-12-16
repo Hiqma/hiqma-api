@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, ManyToOne, JoinColumn, OneToMany } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn, OneToMany } from 'typeorm';
 import { User } from './user.entity';
 import { Author } from './author.entity';
 import { Category } from './category.entity';
@@ -35,6 +35,9 @@ export class Content {
   @Column({ type: 'text', nullable: true })
   images: string;
 
+  @Column({ type: 'varchar', length: 500, nullable: true })
+  coverImageUrl: string;
+
   @Column({ type: 'varchar', length: 20, default: 'pending' })
   status: 'pending' | 'verified' | 'rejected';
 
@@ -52,6 +55,9 @@ export class Content {
 
   @CreateDateColumn()
   createdAt: Date;
+
+  @UpdateDateColumn()
+  updatedAt: Date;
 
   @ManyToOne(() => User)
   @JoinColumn({ name: 'contributorId' })
