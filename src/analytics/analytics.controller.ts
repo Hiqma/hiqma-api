@@ -1,6 +1,7 @@
-import { Controller, Get, Post, Query, Param, Body, Res, UseGuards, SetMetadata } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiQuery, ApiBearerAuth, ApiBody } from '@nestjs/swagger';
+import { Controller, Get, Post, Query, Param, Body, Res, UseGuards } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse, ApiQuery, ApiBearerAuth, ApiBody, ApiSecurity } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { FlexibleAuthGuard } from '../auth/flexible-auth.guard';
 import type { Response } from 'express';
 import { AnalyticsService } from './analytics.service';
 import { AdvancedAnalyticsService } from './advanced-analytics.service';
@@ -228,7 +229,9 @@ export class AnalyticsController {
   }
 
   @Post('hubs/:hubId/collect')
-  @SetMetadata('isPublic', true) // Mark this endpoint as public for edge hub access
+  @UseGuards(FlexibleAuthGuard)
+  @ApiSecurity('api-key')
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Collect analytics data from edge hub' })
   @ApiResponse({ 
     status: 201, 
@@ -324,5 +327,125 @@ export class AnalyticsController {
   })
   async getDataQualityMetrics(@Query('hubId') hubId?: string) {
     return this.analyticsService.getDataQualityMetrics(hubId);
+  }
+
+  @Get('enhanced')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get enhanced analytics with comprehensive metrics' })
+  @ApiQuery({ name: 'hubId', required: false, description: 'Filter by specific hub ID' })
+  @ApiQuery({ name: 'deviceId', required: false, description: 'Filter by specific device ID' })
+  @ApiQuery({ name: 'studentId', required: false, description: 'Filter by specific student ID' })
+  @ApiQuery({ name: 'startDate', required: false, description: 'Start date for analytics (ISO string)' })
+  @ApiQuery({ name: 'endDate', required: false, description: 'End date for analytics (ISO string)' })
+  @ApiQuery({ name: 'contentId', required: false, description: 'Filter by specific content ID' })
+  @ApiQuery({ name: 'grade', required: false, description: 'Filter by student grade' })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Enhanced analytics retrieved successfully'
+  })
+  async getEnhancedAnalytics(
+    @Query('hubId') hubId?: string,
+    @Query('deviceId') deviceId?: string,
+    @Query('studentId') studentId?: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+    @Query('contentId') contentId?: string,
+    @Query('grade') grade?: string,
+  ) {
+    console.log('getEnhancedAnalytics - Query params:', { hubId, deviceId, studentId, startDate, endDate, contentId, grade });
+    
+    const dateRange = startDate && endDate ? {
+      start: new Date(startDate),
+      end: new Date(endDate + 'T23:59:59.999Z'), // Include the entire end date
+    } : undefined;
+    
+    console.log('getEnhancedAnalytics - Parsed dateRange:', dateRange);
+
+    // Get overview stats
+    const engagementStats = await this.analyticsService.getEnhancedEngagementStats();
+    
+    // Get content performance
+    const contentPerformance = await this.advancedAnalyticsService.getContentPerformance();
+    
+    // Get engagement trends
+    const engagementTrends = await this.advancedAnalyticsService.getLearningTrends(30);
+    
+    // Get hub analytics if hubId is provided
+    let hubAnalytics = [];
+    if (hubId) {
+      const hubData = await this.analyticsService.getHubAnalytics(hubId, dateRange);
+      hubAnalytics = [hubData];
+    } else {
+      hubAnalytics = await this.advancedAnalyticsService.getHubAnalytics();
+    }
+
+    // Get device analytics if deviceId is provided
+    let deviceAnalytics = [];
+    if (deviceId) {
+      const deviceData = await this.analyticsService.getDeviceAnalytics(deviceId, dateRange);
+      deviceAnalytics = [deviceData];
+    }
+
+    // Get student analytics if studentId is provided
+    let studentAnalytics = [];
+    if (studentId) {
+      const studentData = await this.analyticsService.getStudentAnalytics(studentId, dateRange);
+      studentAnalytics = [studentData];
+    }
+
+    // Calculate totalTimeSpent and avgQuizScore from activity logs
+    const timeAndScoreStats = await this.analyticsService.getTotalTimeAndAvgScore(dateRange);
+    
+    console.log('getEnhancedAnalytics - timeAndScoreStats:', timeAndScoreStats);
+
+    return {
+      overview: {
+        totalSessions: engagementStats.totalSessions,
+        totalDevices: engagementStats.totalDevices,
+        totalStudents: engagementStats.totalStudents,
+        totalTimeSpent: timeAndScoreStats.totalTimeSpent,
+        completionRate: engagementStats.completionRate,
+        avgQuizScore: timeAndScoreStats.avgQuizScore,
+      },
+      deviceAnalytics,
+      studentAnalytics,
+      contentPerformance,
+      engagementTrends,
+      hubAnalytics,
+    };
+  }
+
+  @Get('reading-progress-trends')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get reading progress trends over time' })
+  @ApiQuery({ name: 'hubId', required: false, description: 'Filter by specific hub ID' })
+  @ApiQuery({ name: 'startDate', required: false, description: 'Start date for analytics (ISO string)' })
+  @ApiQuery({ name: 'endDate', required: false, description: 'End date for analytics (ISO string)' })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Reading progress trends retrieved successfully'
+  })
+  async getReadingProgressTrends(
+    @Query('hubId') hubId?: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    // Use learning trends as reading progress trends
+    const days = startDate && endDate ? 
+      Math.ceil((new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24)) : 
+      30;
+    
+    const trends = await this.advancedAnalyticsService.getLearningTrends(days);
+    
+    // Transform to match expected format
+    return trends.map(trend => ({
+      period: trend.date,
+      sessions: trend.uniqueSessions || 0,
+      completions: trend.completions || 0,
+      avgTime: trend.avgTimeSpent || 0,
+      avgScore: trend.avgQuizScore || 0,
+    }));
   }
 }

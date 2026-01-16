@@ -1,13 +1,17 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, ILike } from 'typeorm';
-import { Author } from '../database/entities';
+import { Author, Content, ContentAuthor } from '../database/entities';
 
 @Injectable()
 export class AuthorsService {
   constructor(
     @InjectRepository(Author)
     private authorRepository: Repository<Author>,
+    @InjectRepository(Content)
+    private contentRepository: Repository<Content>,
+    @InjectRepository(ContentAuthor)
+    private contentAuthorRepository: Repository<ContentAuthor>,
   ) {}
 
   async getAllAuthors() {
@@ -79,20 +83,83 @@ export class AuthorsService {
   }
 
   async getAuthorStats(id: string) {
-    // In a real implementation, you would query related tables
-    // For now, return mock data based on author info
+    // Get author
     const author = await this.getAuthorById(id);
     if (!author) {
       throw new Error('Author not found');
     }
 
-    // Mock stats - in real app, query content/books tables
+    // Get content IDs for this author through the join table
+    const contentAuthors = await this.contentAuthorRepository.find({
+      where: { authorId: id },
+      select: ['contentId']
+    });
+
+    const contentIds = contentAuthors.map(ca => ca.contentId);
+
+    if (contentIds.length === 0) {
+      return {
+        totalContent: 0,
+        publishedContent: 0,
+        draftContent: 0,
+        yearsActive: author.birthYear ? Math.max(0, new Date().getFullYear() - author.birthYear - 20) : 0
+      };
+    }
+
+    // Get content stats
+    const [allContent, publishedContent] = await Promise.all([
+      this.contentRepository.count({ 
+        where: contentIds.map(id => ({ id }))
+      }),
+      this.contentRepository.count({ 
+        where: contentIds.map(id => ({ id, status: 'verified' as const }))
+      })
+    ]);
+
+    // Calculate years active
     const yearsActive = author.birthYear ? new Date().getFullYear() - author.birthYear - 20 : 0;
     
     return {
-      totalBooks: Math.floor(Math.random() * 20) + 1,
-      publishedWorks: Math.floor(Math.random() * 15) + 1,
+      totalContent: allContent,
+      publishedContent: publishedContent,
+      draftContent: allContent - publishedContent,
       yearsActive: Math.max(0, yearsActive)
     };
+  }
+
+  async getAuthorContent(id: string) {
+    // Verify author exists
+    const author = await this.getAuthorById(id);
+    if (!author) {
+      throw new Error('Author not found');
+    }
+
+    // Get content IDs for this author through the join table
+    const contentAuthors = await this.contentAuthorRepository.find({
+      where: { authorId: id },
+      select: ['contentId']
+    });
+
+    const contentIds = contentAuthors.map(ca => ca.contentId);
+
+    if (contentIds.length === 0) {
+      return [];
+    }
+
+    // Get all content by this author with related data
+    const content = await this.contentRepository
+      .createQueryBuilder('content')
+      .leftJoinAndSelect('content.ageGroup', 'ageGroup')
+      .leftJoinAndSelect('content.contentCategories', 'contentCategories')
+      .leftJoinAndSelect('contentCategories.category', 'category')
+      .whereInIds(contentIds)
+      .orderBy('content.createdAt', 'DESC')
+      .getMany();
+
+    // Transform to include category directly for easier access
+    return content.map(c => ({
+      ...c,
+      category: c.contentCategories?.[0]?.category || null
+    }));
   }
 }

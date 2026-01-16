@@ -143,10 +143,10 @@ export class AnalyticsService {
   async getDeviceAnalytics(deviceId: string, dateRange?: { start: Date; end: Date }) {
     let query = this.activityLogRepository
       .createQueryBuilder('log')
-      .where('log."deviceId" = :deviceId', { deviceId });
+      .where('log.deviceId = :deviceId', { deviceId });
 
     if (dateRange) {
-      query = query.andWhere('log."timestamp" BETWEEN :start AND :end', {
+      query = query.andWhere('log.timestamp BETWEEN :start AND :end', {
         start: dateRange.start,
         end: dateRange.end,
       });
@@ -155,29 +155,29 @@ export class AnalyticsService {
     const totalSessions = await query.getCount();
     
     const timeSpentResult = await query
-      .select('SUM(log."timeSpent")', 'totalTime')
-      .addSelect('AVG(log."timeSpent")', 'avgTime')
+      .select('SUM(log.timeSpent)', 'totalTime')
+      .addSelect('AVG(log.timeSpent)', 'avgTime')
       .getRawOne();
 
     const completionStats = await query
-      .select('COUNT(CASE WHEN log."moduleCompleted" = true THEN 1 END)', 'completed')
+      .select('COUNT(CASE WHEN log.moduleCompleted = true THEN 1 END)', 'completed')
       .addSelect('COUNT(*)', 'total')
       .getRawOne();
 
     const contentUsage = await query
-      .select('log."contentId"', 'contentId')
+      .select('log.contentId', 'contentId')
       .addSelect('COUNT(*)', 'sessions')
-      .addSelect('SUM(log."timeSpent")', 'totalTime')
-      .groupBy('log."contentId"')
+      .addSelect('SUM(log.timeSpent)', 'totalTime')
+      .groupBy('log.contentId')
       .orderBy('sessions', 'DESC')
       .getRawMany();
 
     const studentUsage = await query
-      .select('log."studentId"', 'studentId')
+      .select('log.studentId', 'studentId')
       .addSelect('COUNT(*)', 'sessions')
-      .addSelect('SUM(log."timeSpent")', 'totalTime')
-      .where('log."studentId" IS NOT NULL')
-      .groupBy('log."studentId"')
+      .addSelect('SUM(log.timeSpent)', 'totalTime')
+      .where('log.studentId IS NOT NULL')
+      .groupBy('log.studentId')
       .orderBy('sessions', 'DESC')
       .getRawMany();
 
@@ -199,10 +199,10 @@ export class AnalyticsService {
   async getStudentAnalytics(studentId: string, dateRange?: { start: Date; end: Date }) {
     let query = this.activityLogRepository
       .createQueryBuilder('log')
-      .where('log."studentId" = :studentId', { studentId });
+      .where('log.studentId = :studentId', { studentId });
 
     if (dateRange) {
-      query = query.andWhere('log."timestamp" BETWEEN :start AND :end', {
+      query = query.andWhere('log.timestamp BETWEEN :start AND :end', {
         start: dateRange.start,
         end: dateRange.end,
       });
@@ -211,41 +211,41 @@ export class AnalyticsService {
     const totalSessions = await query.getCount();
     
     const timeSpentResult = await query
-      .select('SUM(log."timeSpent")', 'totalTime')
-      .addSelect('AVG(log."timeSpent")', 'avgTime')
+      .select('SUM(log.timeSpent)', 'totalTime')
+      .addSelect('AVG(log.timeSpent)', 'avgTime')
       .getRawOne();
 
     const completionStats = await query
-      .select('COUNT(CASE WHEN log."moduleCompleted" = true THEN 1 END)', 'completed')
+      .select('COUNT(CASE WHEN log.moduleCompleted = true THEN 1 END)', 'completed')
       .addSelect('COUNT(*)', 'total')
       .getRawOne();
 
     const contentProgress = await query
-      .select('log."contentId"', 'contentId')
+      .select('log.contentId', 'contentId')
       .addSelect('COUNT(*)', 'sessions')
-      .addSelect('SUM(log."timeSpent")', 'totalTime')
-      .addSelect('AVG(log."quizScore")', 'avgQuizScore')
-      .addSelect('MAX(log."moduleCompleted")', 'completed')
-      .groupBy('log."contentId"')
+      .addSelect('SUM(log.timeSpent)', 'totalTime')
+      .addSelect('AVG(log.quizScore)', 'avgQuizScore')
+      .addSelect('MAX(log.moduleCompleted)', 'completed')
+      .groupBy('log.contentId')
       .orderBy('sessions', 'DESC')
       .getRawMany();
 
     const deviceUsage = await query
-      .select('log."deviceId"', 'deviceId')
+      .select('log.deviceId', 'deviceId')
       .addSelect('COUNT(*)', 'sessions')
-      .addSelect('SUM(log."timeSpent")', 'totalTime')
-      .where('log."deviceId" IS NOT NULL')
-      .groupBy('log."deviceId"')
+      .addSelect('SUM(log.timeSpent)', 'totalTime')
+      .where('log.deviceId IS NOT NULL')
+      .groupBy('log.deviceId')
       .orderBy('sessions', 'DESC')
       .getRawMany();
 
     // Get learning progression over time
     const learningProgression = await query
-      .select('DATE(log."timestamp")', 'date')
+      .select('DATE(log.timestamp)', 'date')
       .addSelect('COUNT(*)', 'sessions')
-      .addSelect('SUM(log."timeSpent")', 'timeSpent')
-      .addSelect('AVG(log."quizScore")', 'avgScore')
-      .groupBy('DATE(log."timestamp")')
+      .addSelect('SUM(log.timeSpent)', 'timeSpent')
+      .addSelect('AVG(log.quizScore)', 'avgScore')
+      .groupBy('DATE(log.timestamp)')
       .orderBy('date', 'ASC')
       .getRawMany();
 
@@ -268,10 +268,10 @@ export class AnalyticsService {
   async getHubAnalytics(hubId: string, dateRange?: { start: Date; end: Date }) {
     let query = this.activityLogRepository
       .createQueryBuilder('log')
-      .where('log."hubId" = :hubId', { hubId });
+      .where('log.hubId = :hubId', { hubId });
 
     if (dateRange) {
-      query = query.andWhere('log."timestamp" BETWEEN :start AND :end', {
+      query = query.andWhere('log.timestamp BETWEEN :start AND :end', {
         start: dateRange.start,
         end: dateRange.end,
       });
@@ -281,8 +281,8 @@ export class AnalyticsService {
     const totalSessions = await query.getCount();
     
     const timeSpentResult = await query
-      .select('SUM(log."timeSpent")', 'totalTime')
-      .addSelect('AVG(log."timeSpent")', 'avgTime')
+      .select('SUM(log.timeSpent)', 'totalTime')
+      .addSelect('AVG(log.timeSpent)', 'avgTime')
       .getRawOne();
 
     // Get device stats for this hub
@@ -299,34 +299,34 @@ export class AnalyticsService {
 
     // Get unique devices and students used in this time period
     const uniqueDevicesResult = await query
-      .select('COUNT(DISTINCT log."deviceId")', 'count')
-      .where('log."deviceId" IS NOT NULL')
+      .select('COUNT(DISTINCT log.deviceId)', 'count')
+      .where('log.deviceId IS NOT NULL')
       .getRawOne();
 
     const uniqueStudentsResult = await query
-      .select('COUNT(DISTINCT log."studentId")', 'count')
-      .where('log."studentId" IS NOT NULL')
+      .select('COUNT(DISTINCT log.studentId)', 'count')
+      .where('log.studentId IS NOT NULL')
       .getRawOne();
 
     // Get top performing content
     const topContent = await query
-      .select('log."contentId"', 'contentId')
+      .select('log.contentId', 'contentId')
       .addSelect('COUNT(*)', 'sessions')
-      .addSelect('SUM(log."timeSpent")', 'totalTime')
-      .addSelect('AVG(log."quizScore")', 'avgScore')
-      .groupBy('log."contentId"')
+      .addSelect('SUM(log.timeSpent)', 'totalTime')
+      .addSelect('AVG(log.quizScore)', 'avgScore')
+      .groupBy('log.contentId')
       .orderBy('sessions', 'DESC')
       .limit(10)
       .getRawMany();
 
     // Get daily activity trends
     const dailyActivity = await query
-      .select('DATE(log."timestamp")', 'date')
+      .select('DATE(log.timestamp)', 'date')
       .addSelect('COUNT(*)', 'sessions')
-      .addSelect('COUNT(DISTINCT log."deviceId")', 'uniqueDevices')
-      .addSelect('COUNT(DISTINCT log."studentId")', 'uniqueStudents')
-      .addSelect('SUM(log."timeSpent")', 'totalTime')
-      .groupBy('DATE(log."timestamp")')
+      .addSelect('COUNT(DISTINCT log.deviceId)', 'uniqueDevices')
+      .addSelect('COUNT(DISTINCT log.studentId)', 'uniqueStudents')
+      .addSelect('SUM(log.timeSpent)', 'totalTime')
+      .groupBy('DATE(log.timestamp)')
       .orderBy('date', 'ASC')
       .getRawMany();
 
@@ -353,7 +353,7 @@ export class AnalyticsService {
     let query = this.activityLogRepository.createQueryBuilder('log');
 
     if (dateRange) {
-      query = query.where('log."timestamp" BETWEEN :start AND :end', {
+      query = query.where('log.timestamp BETWEEN :start AND :end', {
         start: dateRange.start,
         end: dateRange.end,
       });
@@ -660,35 +660,35 @@ export class AnalyticsService {
     let query = this.activityLogRepository.createQueryBuilder('log');
     
     if (hubId) {
-      query = query.where('log."hubId" = :hubId', { hubId });
+      query = query.where('log.hubId = :hubId', { hubId });
     }
 
     const totalEvents = await query.getCount();
     
     const eventsWithDeviceId = await query
       .clone()
-      .andWhere('log."deviceId" IS NOT NULL')
+      .andWhere('log.deviceId IS NOT NULL')
       .getCount();
 
     const eventsWithStudentId = await query
       .clone()
-      .andWhere('log."studentId" IS NOT NULL')
+      .andWhere('log.studentId IS NOT NULL')
       .getCount();
 
     const eventsWithBothIds = await query
       .clone()
-      .andWhere('log."deviceId" IS NOT NULL')
-      .andWhere('log."studentId" IS NOT NULL')
+      .andWhere('log.deviceId IS NOT NULL')
+      .andWhere('log.studentId IS NOT NULL')
       .getCount();
 
     const avgTimeResult = await query
       .clone()
-      .select('AVG(log."timeSpent")', 'avgTime')
+      .select('AVG(log.timeSpent)', 'avgTime')
       .getRawOne();
 
     const completionResult = await query
       .clone()
-      .select('COUNT(CASE WHEN log."moduleCompleted" = true THEN 1 END) * 100.0 / COUNT(*)', 'rate')
+      .select('COUNT(CASE WHEN log.moduleCompleted = true THEN 1 END) * 100.0 / COUNT(*)', 'rate')
       .getRawOne();
 
     const averageTimeSpent = parseFloat(avgTimeResult.avgTime) || 0;

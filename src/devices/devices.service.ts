@@ -265,4 +265,151 @@ export class DevicesService {
       codeCollisionRate: Math.round(codeCollisionRate * 10000) / 100, // Percentage with 2 decimal places
     };
   }
+
+  /**
+   * Get analytics for all devices in a hub
+   */
+  async getHubDeviceAnalytics(hubId: string): Promise<any[]> {
+    const devices = await this.deviceRepository.find({
+      where: { hubId },
+    });
+
+    // Get activity logs for all devices in this hub
+    const deviceIds = devices.map(d => d.id);
+    const activityLogs: Array<{
+      deviceId: string;
+      totalSessions: string;
+      totalTimeSpent: string;
+      completedSessions: string;
+      avgQuizScore: string;
+      lastActivity: Date;
+    }> = await this.deviceRepository.query(`
+      SELECT 
+        "deviceId",
+        COUNT(*) as "totalSessions",
+        SUM("timeSpent") as "totalTimeSpent",
+        COUNT(CASE WHEN "moduleCompleted" = true THEN 1 END) as "completedSessions",
+        AVG(CASE WHEN "quizScore" IS NOT NULL THEN "quizScore" END) as "avgQuizScore",
+        MAX("timestamp") as "lastActivity"
+      FROM activity_logs
+      WHERE "deviceId" = ANY($1)
+      GROUP BY "deviceId"
+    `, [deviceIds]);
+
+    const activityMap = new Map(activityLogs.map(log => [log.deviceId, log]));
+
+    return devices.map(device => {
+      const activity = activityMap.get(device.id);
+      
+      if (!activity) {
+        return {
+          deviceId: device.id,
+          deviceCode: device.deviceCode,
+          totalSessions: 0,
+          totalTimeSpent: 0,
+          completionRate: 0,
+          avgQuizScore: 0,
+          lastActivity: device.lastSeen?.toISOString() || null,
+        };
+      }
+
+      const totalSessions = parseInt(activity.totalSessions) || 0;
+      const completedSessions = parseInt(activity.completedSessions) || 0;
+
+      return {
+        deviceId: device.id,
+        deviceCode: device.deviceCode,
+        totalSessions,
+        totalTimeSpent: parseInt(activity.totalTimeSpent) || 0,
+        completionRate: totalSessions > 0 ? (completedSessions / totalSessions) * 100 : 0,
+        avgQuizScore: parseFloat(activity.avgQuizScore) || 0,
+        lastActivity: activity.lastActivity || device.lastSeen?.toISOString() || null,
+      };
+    });
+  }
+
+  /**
+   * Get analytics for all devices across all hubs
+   */
+  async getAllDeviceAnalytics(filters?: {
+    startDate?: Date;
+    endDate?: Date;
+    contentId?: string;
+  }): Promise<any[]> {
+    // Get all devices
+    const devices = await this.deviceRepository.find({
+      order: { createdAt: 'DESC' },
+    });
+
+    if (devices.length === 0) {
+      return [];
+    }
+
+    // Build query with optional filters
+    let query = `
+      SELECT 
+        "deviceId",
+        COUNT(*) as "totalSessions",
+        SUM("timeSpent") as "totalTimeSpent",
+        COUNT(CASE WHEN "moduleCompleted" = true THEN 1 END) as "completedSessions",
+        AVG(CASE WHEN "quizScore" IS NOT NULL THEN "quizScore" END) as "avgQuizScore",
+        MAX("timestamp") as "lastActivity"
+      FROM activity_logs
+      WHERE "deviceId" IS NOT NULL
+    `;
+
+    const params: any[] = [];
+    let paramIndex = 1;
+
+    if (filters?.startDate) {
+      query += ` AND "timestamp" >= $${paramIndex}`;
+      params.push(filters.startDate);
+      paramIndex++;
+    }
+
+    if (filters?.endDate) {
+      query += ` AND "timestamp" <= $${paramIndex}`;
+      params.push(filters.endDate);
+      paramIndex++;
+    }
+
+    if (filters?.contentId) {
+      query += ` AND "contentId" = $${paramIndex}`;
+      params.push(filters.contentId);
+      paramIndex++;
+    }
+
+    query += ` GROUP BY "deviceId"`;
+
+    const activityLogs: Array<{
+      deviceId: string;
+      totalSessions: string;
+      totalTimeSpent: string;
+      completedSessions: string;
+      avgQuizScore: string;
+      lastActivity: Date;
+    }> = await this.deviceRepository.query(query, params);
+
+    const activityMap = new Map(activityLogs.map(log => [log.deviceId, log]));
+
+    // Only return devices that exist in the devices table AND have activity
+    // This ensures data integrity - orphaned activity logs (referencing deleted devices) are excluded
+    return devices
+      .filter(device => activityMap.has(device.id))
+      .map(device => {
+        const activity = activityMap.get(device.id)!;
+        const totalSessions = parseInt(activity.totalSessions) || 0;
+        const completedSessions = parseInt(activity.completedSessions) || 0;
+
+        return {
+          deviceId: device.id,
+          deviceCode: device.deviceCode,
+          totalSessions,
+          totalTimeSpent: parseInt(activity.totalTimeSpent) || 0,
+          completionRate: totalSessions > 0 ? (completedSessions / totalSessions) * 100 : 0,
+          avgQuizScore: parseFloat(activity.avgQuizScore) || 0,
+          lastActivity: activity.lastActivity || device.lastSeen?.toISOString() || null,
+        };
+      });
+  }
 }

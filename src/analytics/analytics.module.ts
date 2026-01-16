@@ -4,9 +4,13 @@ import { ActivityLog, Content, User, EdgeHub, Device, Student } from '../databas
 import { AnalyticsService } from './analytics.service';
 import { AdvancedAnalyticsService } from './advanced-analytics.service';
 import { AnalyticsController } from './analytics.controller';
+import { AuthModule } from '../auth/auth.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([ActivityLog, Content, User, EdgeHub, Device, Student])],
+  imports: [
+    TypeOrmModule.forFeature([ActivityLog, Content, User, EdgeHub, Device, Student]),
+    AuthModule,
+  ],
   providers: [AnalyticsService, AdvancedAnalyticsService],
   controllers: [AnalyticsController],
 })

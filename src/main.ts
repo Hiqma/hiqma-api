@@ -1,13 +1,20 @@
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
+import { NestExpressApplication } from '@nestjs/platform-express';
+import { join } from 'path';
 import { DataSource } from 'typeorm';
 import { seedAdminUser } from './database/seeds/admin.seed';
 import { seedCategories } from './database/seeds/categories.seed';
 import { seedAgeGroups } from './database/seeds/age-groups.seed';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  
+  // Serve static files
+  app.useStaticAssets(join(__dirname, '..', 'uploads'), {
+    prefix: '/uploads/',
+  });
   
   const dataSource = app.get(DataSource);
   await seedAdminUser(dataSource);

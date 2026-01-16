@@ -154,8 +154,8 @@ export class StudentsService {
         throw new NotFoundException('Hub not found');
       }
 
-      // Validate age and COPPA compliance
-      if (studentData.age !== undefined && (studentData.age < 3 || studentData.age > 18)) {
+      // Validate age and COPPA compliance (only if age is provided and is a valid number)
+      if (studentData.age !== undefined && studentData.age !== null && !isNaN(studentData.age) && studentData.age > 0 && (studentData.age < 3 || studentData.age > 18)) {
         await this.auditLogger.logStudentDataAccess({
           ...contextWithHub,
           action: 'create',
@@ -167,8 +167,9 @@ export class StudentsService {
         throw new BadRequestException('Student age must be between 3 and 18');
       }
 
-      // Check COPPA compliance
-      const coppaValidation = this.accessControl.validateStudentAge(studentData.age);
+      // Check COPPA compliance (normalize age value first)
+      const normalizedAge = studentData.age && !isNaN(studentData.age) && studentData.age > 0 ? studentData.age : undefined;
+      const coppaValidation = this.accessControl.validateStudentAge(normalizedAge);
       if (!coppaValidation.compliant) {
         await this.auditLogger.logStudentDataAccess({
           ...contextWithHub,
@@ -179,6 +180,21 @@ export class StudentsService {
           errorMessage: `COPPA compliance issue: ${coppaValidation.warnings.join(', ')}`,
         });
         throw new BadRequestException(`COPPA compliance issue: ${coppaValidation.warnings.join(', ')}`);
+      }
+
+      // Log COPPA warnings for audit purposes (even if compliant)
+      if (coppaValidation.warnings.length > 0) {
+        await this.auditLogger.logStudentDataAccess({
+          ...contextWithHub,
+          action: 'create',
+          studentId: 'unknown',
+          hubId,
+          success: true,
+          details: {
+            coppaWarnings: coppaValidation.warnings,
+            requiresParentalConsent: coppaValidation.requiresParentalConsent,
+          },
+        });
       }
 
       // Check student count limit per hub
@@ -321,8 +337,8 @@ export class StudentsService {
       const contextWithHub = { ...context, hubId: student.hubId };
       await this.accessControl.enforceAccess(contextWithHub, 'student', 'update', studentId);
 
-      // Validate age and COPPA compliance if provided
-      if (updateData.age !== undefined && (updateData.age < 3 || updateData.age > 18)) {
+      // Validate age and COPPA compliance if provided (only if age is provided and is a valid number)
+      if (updateData.age !== undefined && updateData.age !== null && !isNaN(updateData.age) && updateData.age > 0 && (updateData.age < 3 || updateData.age > 18)) {
         await this.auditLogger.logStudentDataAccess({
           ...contextWithHub,
           action: 'update',
@@ -334,9 +350,10 @@ export class StudentsService {
         throw new BadRequestException('Student age must be between 3 and 18');
       }
 
-      // Check COPPA compliance for age updates
+      // Check COPPA compliance for age updates (normalize age value first)
       if (updateData.age !== undefined) {
-        const coppaValidation = this.accessControl.validateStudentAge(updateData.age);
+        const normalizedAge = updateData.age && !isNaN(updateData.age) && updateData.age > 0 ? updateData.age : undefined;
+        const coppaValidation = this.accessControl.validateStudentAge(normalizedAge);
         if (!coppaValidation.compliant) {
           await this.auditLogger.logStudentDataAccess({
             ...contextWithHub,
@@ -347,6 +364,21 @@ export class StudentsService {
             errorMessage: `COPPA compliance issue: ${coppaValidation.warnings.join(', ')}`,
           });
           throw new BadRequestException(`COPPA compliance issue: ${coppaValidation.warnings.join(', ')}`);
+        }
+
+        // Log COPPA warnings for audit purposes (even if compliant)
+        if (coppaValidation.warnings.length > 0) {
+          await this.auditLogger.logStudentDataAccess({
+            ...contextWithHub,
+            action: 'update',
+            studentId,
+            hubId: student.hubId,
+            success: true,
+            details: {
+              coppaWarnings: coppaValidation.warnings,
+              requiresParentalConsent: coppaValidation.requiresParentalConsent,
+            },
+          });
         }
       }
 
@@ -455,6 +487,54 @@ export class StudentsService {
   }
 
   /**
+   * Get student statistics for a specific hub
+   */
+  async getStudentStatsForHub(hubId: string): Promise<{
+    total: number;
+    active: number;
+    inactive: number;
+    byGrade: Record<string, number>;
+    averageAge?: number;
+  }> {
+    const total = await this.studentRepository.count({ where: { hubId } });
+    const active = await this.studentRepository.count({ where: { hubId, status: 'active' } });
+    const inactive = await this.studentRepository.count({ where: { hubId, status: 'inactive' } });
+    
+    // Calculate average age for this hub
+    const ageResult = await this.studentRepository
+      .createQueryBuilder('student')
+      .select('AVG(student.age)', 'avgAge')
+      .where('student.hubId = :hubId', { hubId })
+      .andWhere('student.age IS NOT NULL')
+      .getRawOne();
+    
+    const averageAge = ageResult?.avgAge ? Math.round(parseFloat(ageResult.avgAge) * 10) / 10 : undefined;
+    
+    // Get grade distribution for this hub
+    const gradeResults = await this.studentRepository
+      .createQueryBuilder('student')
+      .select('student.grade', 'grade')
+      .addSelect('COUNT(*)', 'count')
+      .where('student.hubId = :hubId', { hubId })
+      .andWhere('student.grade IS NOT NULL')
+      .groupBy('student.grade')
+      .getRawMany();
+    
+    const byGrade: Record<string, number> = {};
+    gradeResults.forEach(result => {
+      byGrade[result.grade] = parseInt(result.count);
+    });
+    
+    return {
+      total,
+      active,
+      inactive,
+      byGrade,
+      averageAge,
+    };
+  }
+
+  /**
    * Get student statistics for monitoring
    */
   async getStudentStats(): Promise<{
@@ -503,13 +583,17 @@ export class StudentsService {
   /**
    * Bulk create students from CSV data
    */
-  async bulkCreateStudents(hubId: string, studentsData: Array<{
-    firstName?: string;
-    lastName?: string;
-    grade?: string;
-    age?: number;
-    metadata?: Record<string, any>;
-  }>): Promise<Student[]> {
+  async bulkCreateStudents(
+    hubId: string, 
+    studentsData: Array<{
+      firstName?: string;
+      lastName?: string;
+      grade?: string;
+      age?: number;
+      metadata?: Record<string, any>;
+    }>,
+    context: AccessContext = { userType: 'system' }
+  ): Promise<Student[]> {
     // Validate hub exists
     const hub = await this.edgeHubRepository.findOne({ where: { hubId } });
     if (!hub) {
@@ -690,5 +774,172 @@ export class StudentsService {
       });
       throw error;
     }
+  }
+
+  /**
+   * Get analytics for all students in a hub
+   */
+  async getHubStudentAnalytics(hubId: string): Promise<any[]> {
+    const students = await this.studentRepository.find({
+      where: { hubId },
+    });
+
+    // Get activity logs for all students in this hub
+    const studentIds = students.map(s => s.id);
+    const activityLogs: Array<{
+      studentId: string;
+      totalSessions: string;
+      totalTimeSpent: string;
+      completedSessions: string;
+      avgQuizScore: string;
+      lastActivity: Date;
+    }> = await this.studentRepository.query(`
+      SELECT 
+        "studentId",
+        COUNT(*) as "totalSessions",
+        SUM("timeSpent") as "totalTimeSpent",
+        COUNT(CASE WHEN "moduleCompleted" = true THEN 1 END) as "completedSessions",
+        AVG(CASE WHEN "quizScore" IS NOT NULL THEN "quizScore" END) as "avgQuizScore",
+        MAX("timestamp") as "lastActivity"
+      FROM activity_logs
+      WHERE "studentId" = ANY($1)
+      GROUP BY "studentId"
+    `, [studentIds]);
+
+    const activityMap = new Map(activityLogs.map(log => [log.studentId, log]));
+
+    return students.map(student => {
+      const decryptedStudent = this.decryptStudentData(student);
+      const activity = activityMap.get(student.id);
+
+      if (!activity) {
+        return {
+          studentId: student.id,
+          studentCode: student.studentCode,
+          firstName: decryptedStudent.firstName,
+          lastName: decryptedStudent.lastName,
+          grade: student.grade,
+          totalSessions: 0,
+          totalTimeSpent: 0,
+          completionRate: 0,
+          avgQuizScore: 0,
+          contentCompleted: 0,
+          lastActivity: student.updatedAt?.toISOString() || null,
+        };
+      }
+
+      const totalSessions = parseInt(activity.totalSessions) || 0;
+      const completedSessions = parseInt(activity.completedSessions) || 0;
+
+      return {
+        studentId: student.id,
+        studentCode: student.studentCode,
+        firstName: decryptedStudent.firstName,
+        lastName: decryptedStudent.lastName,
+        grade: student.grade,
+        totalSessions,
+        totalTimeSpent: parseInt(activity.totalTimeSpent) || 0,
+        completionRate: totalSessions > 0 ? (completedSessions / totalSessions) * 100 : 0,
+        avgQuizScore: parseFloat(activity.avgQuizScore) || 0,
+        contentCompleted: completedSessions,
+        lastActivity: activity.lastActivity || student.updatedAt?.toISOString() || null,
+      };
+    });
+  }
+
+  /**
+   * Get analytics for all students across all hubs
+   */
+  async getAllStudentAnalytics(filters?: {
+    startDate?: Date;
+    endDate?: Date;
+    contentId?: string;
+    grade?: string;
+  }): Promise<any[]> {
+    // Get all students
+    const queryBuilder = this.studentRepository.createQueryBuilder('student');
+    
+    if (filters?.grade) {
+      queryBuilder.where('student.grade = :grade', { grade: filters.grade });
+    }
+    
+    const students = await queryBuilder
+      .orderBy('student.createdAt', 'DESC')
+      .getMany();
+
+    if (students.length === 0) {
+      return [];
+    }
+
+    // Build query with optional filters
+    let query = `
+      SELECT 
+        "studentId",
+        COUNT(*) as "totalSessions",
+        SUM("timeSpent") as "totalTimeSpent",
+        COUNT(CASE WHEN "moduleCompleted" = true THEN 1 END) as "completedSessions",
+        AVG(CASE WHEN "quizScore" IS NOT NULL THEN "quizScore" END) as "avgQuizScore",
+        MAX("timestamp") as "lastActivity"
+      FROM activity_logs
+      WHERE "studentId" IS NOT NULL
+    `;
+
+    const params: any[] = [];
+    let paramIndex = 1;
+
+    if (filters?.startDate) {
+      query += ` AND "timestamp" >= $${paramIndex}`;
+      params.push(filters.startDate);
+      paramIndex++;
+    }
+
+    if (filters?.endDate) {
+      query += ` AND "timestamp" <= $${paramIndex}`;
+      params.push(filters.endDate);
+      paramIndex++;
+    }
+
+    if (filters?.contentId) {
+      query += ` AND "contentId" = $${paramIndex}`;
+      params.push(filters.contentId);
+      paramIndex++;
+    }
+
+    query += ` GROUP BY "studentId"`;
+
+    const activityLogs: Array<{
+      studentId: string;
+      totalSessions: string;
+      totalTimeSpent: string;
+      completedSessions: string;
+      avgQuizScore: string;
+      lastActivity: Date;
+    }> = await this.studentRepository.query(query, params);
+
+    const activityMap = new Map(activityLogs.map(log => [log.studentId, log]));
+
+    // Only return students that have activity
+    return students
+      .filter(student => activityMap.has(student.id))
+      .map(student => {
+        const decryptedStudent = this.decryptStudentData(student);
+        const activity = activityMap.get(student.id)!;
+        const totalSessions = parseInt(activity.totalSessions) || 0;
+        const completedSessions = parseInt(activity.completedSessions) || 0;
+
+        return {
+          studentId: student.id,
+          studentCode: student.studentCode,
+          firstName: decryptedStudent.firstName,
+          lastName: decryptedStudent.lastName,
+          grade: student.grade,
+          totalSessions,
+          totalTimeSpent: parseInt(activity.totalTimeSpent) || 0,
+          completionRate: totalSessions > 0 ? (completedSessions / totalSessions) * 100 : 0,
+          avgQuizScore: parseFloat(activity.avgQuizScore) || 0,
+          contentCompleted: completedSessions,
+          lastActivity: activity.lastActivity || student.updatedAt?.toISOString() || null,
+        };
+      });
   }
 }

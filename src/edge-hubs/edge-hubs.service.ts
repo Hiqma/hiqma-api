@@ -139,6 +139,52 @@ export class EdgeHubsService {
     return { message: 'Content assigned successfully' };
   }
 
+  async assignAllContentToHub(hubId: string) {
+    // Find the hub by hubId to get the numeric id
+    const hub = await this.edgeHubRepository.findOne({ where: { hubId } });
+    if (!hub) {
+      throw new Error('Hub not found');
+    }
+
+    // Get all verified content
+    const allContent = await this.contentRepository.find({
+      where: { status: 'verified' },
+      select: ['id']
+    });
+
+    if (allContent.length === 0) {
+      return { message: 'No verified content available to assign', assignedCount: 0 };
+    }
+
+    // Get already assigned content
+    const existingAssignments = await this.hubContentRepository.find({
+      where: { hubId: hub.id },
+      select: ['contentId']
+    });
+
+    const existingContentIds = new Set(existingAssignments.map(a => a.contentId));
+    
+    // Filter out already assigned content
+    const contentToAssign = allContent.filter(content => !existingContentIds.has(content.id));
+
+    if (contentToAssign.length === 0) {
+      return { message: 'All available content is already assigned to this hub', assignedCount: 0 };
+    }
+
+    // Create assignments for all unassigned content
+    const assignments = contentToAssign.map(content => 
+      this.hubContentRepository.create({ hubId: hub.id, contentId: content.id })
+    );
+
+    await this.hubContentRepository.save(assignments);
+    
+    return { 
+      message: `Successfully assigned ${assignments.length} content items to hub`,
+      assignedCount: assignments.length,
+      totalContent: allContent.length
+    };
+  }
+
   async unassignContentFromHub(hubId: string, contentId: string) {
     // Find the hub by hubId to get the numeric id
     const hub = await this.edgeHubRepository.findOne({ where: { hubId } });
@@ -172,6 +218,29 @@ export class EdgeHubsService {
     }
 
     const assignments = await queryBuilder.getMany();
+    
+    // If no content is assigned and we're in development mode, return all content
+    if (assignments.length === 0 && process.env.NODE_ENV === 'development') {
+      console.log(`[DEV MODE] No content assigned to hub ${hubId}, returning all verified content`);
+      
+      const allContentQuery = this.contentRepository
+        .createQueryBuilder('content')
+        .leftJoinAndSelect('content.ageGroup', 'ageGroup')
+        .leftJoinAndSelect('content.contentCategories', 'contentCategories')
+        .leftJoinAndSelect('contentCategories.category', 'category')
+        .where('content.status = :status', { status: 'verified' });
+
+      if (since) {
+        allContentQuery.andWhere('content.updatedAt > :since', { since: new Date(since) });
+      }
+
+      const allContent = await allContentQuery.getMany();
+      
+      return allContent.map(content => ({
+        ...content,
+        categories: content.contentCategories?.map(cc => cc.category) || []
+      }));
+    }
     
     return assignments.map(assignment => ({
       ...assignment.content,
@@ -223,7 +292,12 @@ export class EdgeHubsService {
         status: student.status,
         createdAt: student.createdAt,
         updatedAt: student.updatedAt
-      }))
+      })),
+      hubSettings: {
+        allowAnonymousAccess: hub.allowAnonymousAccess,
+        requireStudentAuthentication: hub.requireStudentAuthentication,
+        authenticationMessage: hub.authenticationMessage
+      }
     };
   }
 
@@ -244,6 +318,61 @@ export class EdgeHubsService {
     });
 
     return { message: 'Metrics updated successfully' };
+  }
+
+  /**
+   * Update hub authentication and access settings
+   */
+  async updateHubSettings(hubId: string, settings: {
+    allowAnonymousAccess?: boolean;
+    requireStudentAuthentication?: boolean;
+    authenticationMessage?: string;
+  }) {
+    const hub = await this.edgeHubRepository.findOne({ where: { hubId } });
+    if (!hub) {
+      throw new Error('Hub not found');
+    }
+
+    // Validate settings
+    if (settings.requireStudentAuthentication && settings.allowAnonymousAccess) {
+      throw new Error('Cannot require student authentication while allowing anonymous access');
+    }
+
+    await this.edgeHubRepository.update(hub.id, {
+      ...settings,
+      updatedAt: new Date()
+    });
+
+    return { 
+      message: 'Hub settings updated successfully',
+      settings: {
+        allowAnonymousAccess: settings.allowAnonymousAccess ?? hub.allowAnonymousAccess,
+        requireStudentAuthentication: settings.requireStudentAuthentication ?? hub.requireStudentAuthentication,
+        authenticationMessage: settings.authenticationMessage ?? hub.authenticationMessage
+      }
+    };
+  }
+
+  /**
+   * Get hub authentication settings
+   */
+  async getHubSettings(hubId: string) {
+    const hub = await this.edgeHubRepository.findOne({ 
+      where: { hubId },
+      select: ['id', 'hubId', 'name', 'allowAnonymousAccess', 'requireStudentAuthentication', 'authenticationMessage']
+    });
+    
+    if (!hub) {
+      throw new Error('Hub not found');
+    }
+
+    return {
+      hubId: hub.hubId,
+      name: hub.name,
+      allowAnonymousAccess: hub.allowAnonymousAccess,
+      requireStudentAuthentication: hub.requireStudentAuthentication,
+      authenticationMessage: hub.authenticationMessage
+    };
   }
 
   private generateHubId(): string {

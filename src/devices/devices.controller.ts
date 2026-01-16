@@ -1,5 +1,5 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards, BadRequestException, Res } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiBody } from '@nestjs/swagger';
+import { Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards, BadRequestException, Res } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiBody, ApiQuery } from '@nestjs/swagger';
 import { Response } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { DevicesService } from './devices.service';
@@ -76,38 +76,52 @@ export class DevicesController {
     };
   }
 
-  @Get(':deviceId')
-  @ApiOperation({ summary: 'Get device by ID' })
-  @ApiResponse({ status: 200, description: 'Device retrieved successfully' })
-  @ApiResponse({ status: 404, description: 'Device not found' })
-  async getDevice(@Param('deviceId') deviceId: string) {
-    return await this.devicesService.getDevice(deviceId);
+  @Get('stats')
+  @ApiOperation({ summary: 'Get device code statistics' })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Device code statistics retrieved successfully',
+    example: {
+      totalCodes: 150,
+      activeDevices: 120,
+      pendingDevices: 25,
+      inactiveDevices: 5,
+      codeCollisionRate: 0.02
+    }
+  })
+  async getDeviceCodeStats() {
+    return await this.devicesService.getDeviceCodeStats();
   }
 
-  @Put(':deviceId/regenerate')
-  @ApiOperation({ summary: 'Regenerate device code' })
-  @ApiResponse({ status: 200, description: 'Device code regenerated successfully' })
-  @ApiResponse({ status: 404, description: 'Device not found' })
-  async regenerateDeviceCode(@Param('deviceId') deviceId: string) {
-    try {
-      return await this.devicesService.regenerateDeviceCode(deviceId);
-    } catch (error) {
-      throw new BadRequestException(error.message);
+  @Get('analytics')
+  @ApiOperation({ summary: 'Get analytics for all devices across all hubs' })
+  @ApiQuery({ name: 'startDate', required: false, description: 'Start date for analytics (ISO string)' })
+  @ApiQuery({ name: 'endDate', required: false, description: 'End date for analytics (ISO string)' })
+  @ApiQuery({ name: 'contentId', required: false, description: 'Filter by specific content ID' })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Device analytics retrieved successfully'
+  })
+  async getAllDeviceAnalytics(
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+    @Query('contentId') contentId?: string,
+  ) {
+    const filters: any = {};
+    
+    if (startDate) {
+      filters.startDate = new Date(startDate);
     }
-  }
-
-  @Delete(':deviceId')
-  @ApiOperation({ summary: 'Remove device from hub' })
-  @ApiResponse({ status: 200, description: 'Device removed successfully' })
-  @ApiResponse({ status: 400, description: 'Cannot delete registered device' })
-  @ApiResponse({ status: 404, description: 'Device not found' })
-  async removeDevice(@Param('deviceId') deviceId: string) {
-    try {
-      await this.devicesService.removeDevice(deviceId);
-      return { message: 'Device removed successfully' };
-    } catch (error) {
-      throw new BadRequestException(error.message);
+    
+    if (endDate) {
+      filters.endDate = new Date(endDate + 'T23:59:59.999Z');
     }
+    
+    if (contentId) {
+      filters.contentId = contentId;
+    }
+    
+    return await this.devicesService.getAllDeviceAnalytics(filters);
   }
 
   @Post('register')
@@ -183,20 +197,47 @@ export class DevicesController {
     return await this.devicesService.getHubDeviceStats(hubId);
   }
 
-  @Get('stats')
-  @ApiOperation({ summary: 'Get device code statistics' })
+  @Get(':hubId/analytics')
+  @ApiOperation({ summary: 'Get analytics for all devices in a hub' })
   @ApiResponse({ 
     status: 200, 
-    description: 'Device code statistics retrieved successfully',
-    example: {
-      totalCodes: 150,
-      activeDevices: 120,
-      pendingDevices: 25,
-      inactiveDevices: 5,
-      codeCollisionRate: 0.02
-    }
+    description: 'Device analytics retrieved successfully'
   })
-  async getDeviceCodeStats() {
-    return await this.devicesService.getDeviceCodeStats();
+  async getHubDeviceAnalytics(@Param('hubId') hubId: string) {
+    return await this.devicesService.getHubDeviceAnalytics(hubId);
+  }
+
+  @Get(':deviceId')
+  @ApiOperation({ summary: 'Get device by ID' })
+  @ApiResponse({ status: 200, description: 'Device retrieved successfully' })
+  @ApiResponse({ status: 404, description: 'Device not found' })
+  async getDevice(@Param('deviceId') deviceId: string) {
+    return await this.devicesService.getDevice(deviceId);
+  }
+
+  @Put(':deviceId/regenerate')
+  @ApiOperation({ summary: 'Regenerate device code' })
+  @ApiResponse({ status: 200, description: 'Device code regenerated successfully' })
+  @ApiResponse({ status: 404, description: 'Device not found' })
+  async regenerateDeviceCode(@Param('deviceId') deviceId: string) {
+    try {
+      return await this.devicesService.regenerateDeviceCode(deviceId);
+    } catch (error) {
+      throw new BadRequestException(error.message);
+    }
+  }
+
+  @Delete(':deviceId')
+  @ApiOperation({ summary: 'Remove device from hub' })
+  @ApiResponse({ status: 200, description: 'Device removed successfully' })
+  @ApiResponse({ status: 400, description: 'Cannot delete registered device' })
+  @ApiResponse({ status: 404, description: 'Device not found' })
+  async removeDevice(@Param('deviceId') deviceId: string) {
+    try {
+      await this.devicesService.removeDevice(deviceId);
+      return { message: 'Device removed successfully' };
+    } catch (error) {
+      throw new BadRequestException(error.message);
+    }
   }
 }

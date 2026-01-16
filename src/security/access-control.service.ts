@@ -2,7 +2,7 @@ import { Injectable, Logger, ForbiddenException } from '@nestjs/common';
 
 export interface AccessContext {
   userId?: string;
-  userType: 'admin' | 'system' | 'api' | 'anonymous';
+  userType: 'admin' | 'super_admin' | 'system' | 'api' | 'anonymous';
   hubId?: string;
   ipAddress?: string;
   userAgent?: string;
@@ -30,7 +30,7 @@ export class AccessControlService {
       resource: 'student',
       action: 'view',
       requiredPermissions: ['student:read'],
-      allowedUserTypes: ['admin', 'system'],
+      allowedUserTypes: ['admin', 'super_admin', 'system'],
       requiresHubAccess: true,
       sensitiveData: true,
       complianceRequired: ['COPPA', 'GDPR'],
@@ -39,7 +39,7 @@ export class AccessControlService {
       resource: 'student',
       action: 'create',
       requiredPermissions: ['student:write'],
-      allowedUserTypes: ['admin', 'system'],
+      allowedUserTypes: ['admin', 'super_admin', 'system'],
       requiresHubAccess: true,
       sensitiveData: true,
       complianceRequired: ['COPPA', 'GDPR'],
@@ -48,7 +48,7 @@ export class AccessControlService {
       resource: 'student',
       action: 'update',
       requiredPermissions: ['student:write'],
-      allowedUserTypes: ['admin', 'system'],
+      allowedUserTypes: ['admin', 'super_admin', 'system'],
       requiresHubAccess: true,
       sensitiveData: true,
       complianceRequired: ['COPPA', 'GDPR'],
@@ -57,7 +57,7 @@ export class AccessControlService {
       resource: 'student',
       action: 'delete',
       requiredPermissions: ['student:delete'],
-      allowedUserTypes: ['admin'],
+      allowedUserTypes: ['admin', 'super_admin'],
       requiresHubAccess: true,
       sensitiveData: true,
       complianceRequired: ['COPPA', 'GDPR', 'RIGHT_TO_BE_FORGOTTEN'],
@@ -66,7 +66,7 @@ export class AccessControlService {
       resource: 'student',
       action: 'export',
       requiredPermissions: ['student:export'],
-      allowedUserTypes: ['admin'],
+      allowedUserTypes: ['admin', 'super_admin'],
       requiresHubAccess: true,
       sensitiveData: true,
       complianceRequired: ['GDPR', 'DATA_PORTABILITY'],
@@ -85,28 +85,28 @@ export class AccessControlService {
       resource: 'device',
       action: 'view',
       requiredPermissions: ['device:read'],
-      allowedUserTypes: ['admin', 'system'],
+      allowedUserTypes: ['admin', 'super_admin', 'system'],
       requiresHubAccess: true,
     },
     {
       resource: 'device',
       action: 'create',
       requiredPermissions: ['device:write'],
-      allowedUserTypes: ['admin', 'system'],
+      allowedUserTypes: ['admin', 'super_admin', 'system'],
       requiresHubAccess: true,
     },
     {
       resource: 'device',
       action: 'update',
       requiredPermissions: ['device:write'],
-      allowedUserTypes: ['admin', 'system'],
+      allowedUserTypes: ['admin', 'super_admin', 'system'],
       requiresHubAccess: true,
     },
     {
       resource: 'device',
       action: 'delete',
       requiredPermissions: ['device:delete'],
-      allowedUserTypes: ['admin'],
+      allowedUserTypes: ['admin', 'super_admin'],
       requiresHubAccess: true,
     },
     {
@@ -129,7 +129,7 @@ export class AccessControlService {
       resource: 'analytics',
       action: 'view',
       requiredPermissions: ['analytics:read'],
-      allowedUserTypes: ['admin', 'system'],
+      allowedUserTypes: ['admin', 'super_admin', 'system'],
       requiresHubAccess: true,
     },
     {
@@ -143,7 +143,7 @@ export class AccessControlService {
       resource: 'analytics',
       action: 'export',
       requiredPermissions: ['analytics:export'],
-      allowedUserTypes: ['admin'],
+      allowedUserTypes: ['admin', 'super_admin'],
       requiresHubAccess: true,
       sensitiveData: true,
       complianceRequired: ['GDPR'],
@@ -154,14 +154,14 @@ export class AccessControlService {
       resource: 'hub',
       action: 'view',
       requiredPermissions: ['hub:read'],
-      allowedUserTypes: ['admin', 'system'],
+      allowedUserTypes: ['admin', 'super_admin', 'system'],
       requiresHubAccess: true,
     },
     {
       resource: 'hub',
       action: 'manage',
       requiredPermissions: ['hub:admin'],
-      allowedUserTypes: ['admin'],
+      allowedUserTypes: ['admin', 'super_admin'],
       requiresHubAccess: true,
     },
 
@@ -170,7 +170,7 @@ export class AccessControlService {
       resource: 'audit',
       action: 'view',
       requiredPermissions: ['audit:read'],
-      allowedUserTypes: ['admin'],
+      allowedUserTypes: ['admin', 'super_admin'],
       requiresHubAccess: false,
       sensitiveData: true,
     },
@@ -274,6 +274,17 @@ export class AccessControlService {
     const permissions: string[] = [];
 
     switch (userType) {
+      case 'super_admin':
+        // Super admin has all permissions
+        permissions.push(
+          'student:read', 'student:write', 'student:delete', 'student:export',
+          'device:read', 'device:write', 'device:delete',
+          'analytics:read', 'analytics:export',
+          'hub:read', 'hub:admin',
+          'audit:read'
+        );
+        break;
+        
       case 'admin':
         permissions.push(
           'student:read', 'student:write', 'student:delete', 'student:export',
@@ -312,8 +323,8 @@ export class AccessControlService {
    * Check if user can access specific hub
    */
   async canAccessHub(context: AccessContext, hubId: string): Promise<boolean> {
-    // For now, allow access if user has hub context or is admin
-    if (context.userType === 'admin') {
+    // Super admin and admin can access any hub
+    if (context.userType === 'super_admin' || context.userType === 'admin') {
       return true;
     }
     
@@ -388,9 +399,9 @@ export class AccessControlService {
     const coppaRequirements = this.getCOPPARequirements();
 
     if (!age) {
-      warnings.push('Age not provided - cannot verify COPPA compliance');
+      warnings.push('Age not provided - assuming parental consent required for COPPA compliance');
       return {
-        compliant: false,
+        compliant: true, // Allow creation but assume parental consent needed
         requiresParentalConsent: true,
         warnings,
       };

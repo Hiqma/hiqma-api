@@ -21,6 +21,7 @@ import { DevicesModule } from './devices/devices.module';
 import { StudentsModule } from './students/students.module';
 import { SecurityModule } from './security/security.module';
 import { UploadModule } from './upload/upload.module';
+import { ProfileModule } from './profile/profile.module';
 import { RedocController } from './docs/redoc.controller';
 
 @Module({
@@ -36,7 +37,9 @@ import { RedocController } from './docs/redoc.controller';
         password: config.get('DATABASE_PASSWORD'),
         database: config.get('DATABASE_NAME'),
         entities: [User, Content, ActivityLog, Country, Author, ContributorApplication, Category, AgeGroup, EdgeHub, ContentAuthor, ContentCategory, HubContent, Device, Student],
-        synchronize: true,
+        synchronize: false, // Disabled for safety - use migrations instead
+        migrations: ['dist/database/migrations/*.js'],
+        migrationsRun: true, // Automatically run migrations on startup
       }),
     }),
     AuthModule,
@@ -56,6 +59,7 @@ import { RedocController } from './docs/redoc.controller';
     StudentsModule,
     SecurityModule,
     UploadModule,
+    ProfileModule,
   ],
   controllers: [AppController, RedocController],
   providers: [AppService],

@@ -53,4 +53,14 @@ export class EdgeHub {
 
   @Column({ type: 'timestamp', nullable: true })
   lastMetricsUpdate: Date;
+
+  // Authentication and access control settings
+  @Column({ default: true })
+  allowAnonymousAccess: boolean;
+
+  @Column({ default: false })
+  requireStudentAuthentication: boolean;
+
+  @Column({ type: 'text', nullable: true })
+  authenticationMessage: string; // Custom message for authentication requirements
 }

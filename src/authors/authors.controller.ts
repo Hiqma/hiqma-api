@@ -91,6 +91,48 @@ export class AuthorsController {
     return this.authorsService.createAuthor(authorData);
   }
 
+  @Get(':id')
+  @ApiOperation({ summary: 'Get author by ID' })
+  @ApiParam({ name: 'id', description: 'Author ID' })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Author retrieved successfully'
+  })
+  async getAuthorById(@Param('id') id: string) {
+    const author = await this.authorsService.getAuthorById(id);
+    if (!author) {
+      throw new NotFoundException('Author not found');
+    }
+    return author;
+  }
+
+  @Get(':id/content')
+  @ApiOperation({ summary: 'Get all content by author' })
+  @ApiParam({ name: 'id', description: 'Author ID' })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Author content retrieved successfully'
+  })
+  async getAuthorContent(@Param('id') id: string) {
+    return this.authorsService.getAuthorContent(id);
+  }
+
+  @Get(':id/stats')
+  @ApiOperation({ summary: 'Get author statistics' })
+  @ApiParam({ name: 'id', description: 'Author ID' })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Author statistics retrieved successfully',
+    example: {
+      totalBooks: 15,
+      publishedWorks: 12,
+      yearsActive: 25
+    }
+  })
+  async getAuthorStats(@Param('id') id: string) {
+    return this.authorsService.getAuthorStats(id);
+  }
+
   @Put(':id')
   @ApiOperation({ summary: 'Update author' })
   @ApiParam({ name: 'id', description: 'Author ID' })
@@ -119,21 +161,5 @@ export class AuthorsController {
   })
   async deleteAuthor(@Param('id') id: string) {
     return this.authorsService.deleteAuthor(id);
-  }
-
-  @Get(':id/stats')
-  @ApiOperation({ summary: 'Get author statistics' })
-  @ApiParam({ name: 'id', description: 'Author ID' })
-  @ApiResponse({ 
-    status: 200, 
-    description: 'Author statistics retrieved successfully',
-    example: {
-      totalBooks: 15,
-      publishedWorks: 12,
-      yearsActive: 25
-    }
-  })
-  async getAuthorStats(@Param('id') id: string) {
-    return this.authorsService.getAuthorStats(id);
   }
 }

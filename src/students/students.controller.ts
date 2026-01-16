@@ -1,5 +1,5 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards, BadRequestException, Request } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiBody } from '@nestjs/swagger';
+import { Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards, BadRequestException, Request } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiBody, ApiQuery } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { StudentsService } from './students.service';
 import { AccessContext } from '../security/access-control.service';
@@ -110,6 +110,96 @@ export class StudentsController {
     return await this.studentsService.getStudentsForHub(hubId);
   }
 
+  @Post('validate')
+  @ApiOperation({ summary: 'Validate student code' })
+  @ApiResponse({ status: 200, description: 'Student code validation result' })
+  @ApiBody({
+    type: ValidateStudentCodeDto,
+    examples: {
+      example1: {
+        summary: 'Validate student code',
+        value: { studentCode: 'ABC4' }
+      }
+    }
+  })
+  async validateStudentCode(@Body() data: ValidateStudentCodeDto) {
+    const student = await this.studentsService.validateStudentCode(data.studentCode);
+    return {
+      valid: !!student,
+      student: student || null
+    };
+  }
+
+  @Get('stats')
+  @ApiOperation({ summary: 'Get student statistics' })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Student statistics retrieved successfully',
+    example: {
+      totalStudents: 250,
+      activeStudents: 230,
+      inactiveStudents: 20,
+      averageAge: 9.2,
+      gradeDistribution: {
+        '1st Grade': 45,
+        '2nd Grade': 52,
+        '3rd Grade': 48,
+        '4th Grade': 55,
+        '5th Grade': 50
+      }
+    }
+  })
+  async getStudentStats() {
+    return await this.studentsService.getStudentStats();
+  }
+
+  @Get('analytics')
+  @ApiOperation({ summary: 'Get analytics for all students across all hubs' })
+  @ApiQuery({ name: 'startDate', required: false, description: 'Start date for analytics (ISO string)' })
+  @ApiQuery({ name: 'endDate', required: false, description: 'End date for analytics (ISO string)' })
+  @ApiQuery({ name: 'contentId', required: false, description: 'Filter by specific content ID' })
+  @ApiQuery({ name: 'grade', required: false, description: 'Filter by student grade' })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Student analytics retrieved successfully'
+  })
+  async getAllStudentAnalytics(
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+    @Query('contentId') contentId?: string,
+    @Query('grade') grade?: string,
+  ) {
+    const filters: any = {};
+    
+    if (startDate) {
+      filters.startDate = new Date(startDate);
+    }
+    
+    if (endDate) {
+      filters.endDate = new Date(endDate + 'T23:59:59.999Z');
+    }
+    
+    if (contentId) {
+      filters.contentId = contentId;
+    }
+    
+    if (grade) {
+      filters.grade = grade;
+    }
+    
+    return await this.studentsService.getAllStudentAnalytics(filters);
+  }
+
+  @Get(':hubId/analytics')
+  @ApiOperation({ summary: 'Get analytics for all students in a hub' })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Student analytics retrieved successfully'
+  })
+  async getHubStudentAnalytics(@Param('hubId') hubId: string) {
+    return await this.studentsService.getHubStudentAnalytics(hubId);
+  }
+
   @Get(':studentId')
   @ApiOperation({ summary: 'Get student by ID' })
   @ApiResponse({ status: 200, description: 'Student retrieved successfully' })
@@ -155,84 +245,5 @@ export class StudentsController {
     } catch (error) {
       throw new BadRequestException(error.message);
     }
-  }
-
-  @Post('validate')
-  @ApiOperation({ summary: 'Validate student code' })
-  @ApiResponse({ status: 200, description: 'Student code validation result' })
-  @ApiBody({
-    type: ValidateStudentCodeDto,
-    examples: {
-      example1: {
-        summary: 'Validate student code',
-        value: { studentCode: 'ABC4' }
-      }
-    }
-  })
-  async validateStudentCode(@Body() data: ValidateStudentCodeDto) {
-    const student = await this.studentsService.validateStudentCode(data.studentCode);
-    return {
-      valid: !!student,
-      student: student || null
-    };
-  }
-
-  @Post('hubs/:hubId/bulk')
-  @ApiOperation({ summary: 'Bulk create students from CSV data' })
-  @ApiResponse({ status: 201, description: 'Students created successfully' })
-  @ApiResponse({ status: 400, description: 'Invalid bulk data or limits exceeded' })
-  @ApiBody({
-    type: BulkCreateStudentsDto,
-    examples: {
-      example1: {
-        summary: 'Bulk create students',
-        value: {
-          students: [
-            {
-              firstName: 'John',
-              lastName: 'Doe',
-              grade: '3rd Grade',
-              age: 8
-            },
-            {
-              firstName: 'Jane',
-              lastName: 'Smith',
-              grade: '4th Grade',
-              age: 9
-            }
-          ]
-        }
-      }
-    }
-  })
-  async bulkCreateStudents(@Param('hubId') hubId: string, @Body() data: BulkCreateStudentsDto) {
-    try {
-      return await this.studentsService.bulkCreateStudents(hubId, data.students);
-    } catch (error) {
-      throw new BadRequestException(error.message);
-    }
-  }
-
-  @Get('stats')
-  @ApiOperation({ summary: 'Get student statistics' })
-  @ApiResponse({ 
-    status: 200, 
-    description: 'Student statistics retrieved successfully',
-    example: {
-      totalStudents: 250,
-      activeStudents: 230,
-      inactiveStudents: 20,
-      averageAge: 9.2,
-      gradeDistribution: {
-        '1st Grade': 45,
-        '2nd Grade': 52,
-        '3rd Grade': 48,
-        '4th Grade': 55,
-        '5th Grade': 50
-      }
-    }
-  })
-  async getStudentStats() {
-    return await this.studentsService.getStudentStats();
   }
 }

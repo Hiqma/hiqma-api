@@ -5,7 +5,7 @@ import { Repository } from 'typeorm';
 export interface AuditLogEntry {
   id?: string;
   userId?: string;
-  userType: 'admin' | 'system' | 'api' | 'anonymous';
+  userType: 'admin' | 'super_admin' | 'system' | 'api' | 'anonymous';
   action: string;
   resource: string;
   resourceId?: string;
@@ -72,7 +72,7 @@ export class AuditLoggerService {
    */
   async logStudentDataAccess(params: {
     userId?: string;
-    userType: 'admin' | 'system' | 'api' | 'anonymous';
+    userType: 'admin' | 'super_admin' | 'system' | 'api' | 'anonymous';
     action: 'view' | 'create' | 'update' | 'delete' | 'export';
     studentId: string;
     hubId: string;
@@ -156,7 +156,7 @@ export class AuditLoggerService {
    */
   async logDataExport(params: {
     userId?: string;
-    userType: 'admin' | 'system' | 'api' | 'anonymous';
+    userType: 'admin' | 'super_admin' | 'system' | 'api' | 'anonymous';
     exportType: 'student_data' | 'analytics' | 'full_export';
     resourceIds: string[];
     hubId: string;
@@ -184,7 +184,7 @@ export class AuditLoggerService {
    */
   async logDataDeletion(params: {
     userId?: string;
-    userType: 'admin' | 'system' | 'api' | 'anonymous';
+    userType: 'admin' | 'super_admin' | 'system' | 'api' | 'anonymous';
     deletionType: 'student_data' | 'analytics' | 'full_deletion';
     resourceIds: string[];
     hubId: string;

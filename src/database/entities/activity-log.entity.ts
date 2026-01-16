@@ -34,11 +34,11 @@ export class ActivityLog {
   @CreateDateColumn()
   timestamp: Date;
 
-  @ManyToOne(() => Device)
+  @ManyToOne(() => Device, { nullable: true })
   @JoinColumn({ name: 'deviceId' })
   device: Device;
 
-  @ManyToOne(() => Student)
+  @ManyToOne(() => Student, { nullable: true })
   @JoinColumn({ name: 'studentId' })
   student: Student;
 }
